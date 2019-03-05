@@ -44,9 +44,9 @@ def rotate_part(part, center, theta):
             dict["%d_%d" % (r_x, r_y)] = data[x-left, y-top]
 
     # 旋转后新矩形区域赋值
-    r_data = np.zeros([X_max-X_min, Y_max-Y_min, 3])
-    for x in range(X_min, X_max):
-        for y in range(Y_min, Y_max):
+    r_data = np.zeros([X_max-X_min+1, Y_max-Y_min+1, 3])
+    for x in range(X_min, X_max+1):
+        for y in range(Y_min, Y_max+1):
             if "%d_%d" % (x, y) in dict:
                 r_data[x - X_min][y - Y_min] = dict["%d_%d" % (x, y)]
     return {"left":X_min, "top":Y_min, "width":X_max-X_min, "height":Y_max-Y_min, "data":r_data}
