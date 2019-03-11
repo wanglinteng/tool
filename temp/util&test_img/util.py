@@ -381,6 +381,7 @@ def BPartDistanceY(part0, part1):
     #取垂直方向重叠范围
     r_min = max(top0, top1)
     r_max = min(top0+h0-1, top1+h1-1)
+
     if r_max < r_min: #垂直方向无重叠
         dist = sys.maxsize
         return dist
@@ -401,21 +402,22 @@ def BPartDistanceY(part0, part1):
             if(data1[i1][c1] > 0.0): break
 
         d = left1+c1-(left0+c0)-1
-        # print("%d+%d-(%d+%d)-1=%d" % (left1,c1,left0,c0,d))
+
         if(d >= 0.0):
             pos_min = min(pos_min, d)
             pos_max = max(pos_max, d)
         else:
             neg_min = min(neg_min, abs(d))
             neg_max = max(neg_max, abs(d))
-    
+
     if ((neg_min != sys.maxsize and neg_max != 0) 
         and (pos_min !=sys.maxsize and pos_max != 0)): #正负距离均有。垂直方向重叠，part间有交叉
-        dist = -1*min(pos_max, neg_max)
-    else:
-        print(pos_min,neg_min)
-
-        dist = max(pos_min, neg_min) #只有正或负距离。垂直方向重叠，part间无交叉
+        dist = min(pos_max, neg_max)
+    # 只有正或负距离。垂直方向重叠，part间无交叉。两种情况需分开考虑，因四个值均初始化，无法直接比较
+    elif pos_min == sys.maxsize and pos_max == 0:
+        dist = -1*neg_min
+    elif neg_min == sys.maxsize and neg_max == 0:
+        dist = pos_min
 
     return dist
 
@@ -444,6 +446,7 @@ def BPartDistanceX(part0, part1):
     #取水平方向重叠范围
     c_min = max(left0, left1)
     c_max = min(left0+w0-1, left1+w1-1)
+
     if c_max < c_min: #水平方向无重叠
         dist = sys.maxsize
         return dist
@@ -474,9 +477,13 @@ def BPartDistanceX(part0, part1):
     
     if ((neg_min != sys.maxsize and neg_max != 0) 
         and (pos_min !=sys.maxsize and pos_max != 0)): #正负距离均有。垂直方向重叠，part间有交叉
-        dist = -1*min(pos_max, neg_max)
-    else:
-        dist = max(pos_min, abs(neg_min)) #只有正或负距离。垂直方向重叠，part间无交叉
+        dist = min(pos_max, neg_max)
+    elif pos_min == sys.maxsize and pos_max == 0:
+        dist = -1*neg_min
+    elif neg_min == sys.maxsize and neg_max == 0:
+        dist = pos_min
+    # else:
+    #     dist = max(pos_min, abs(neg_min)) #只有正或负距离。垂直方向重叠，part间无交叉
 
     return dist
 
@@ -498,18 +505,20 @@ def BPartMCDistance(part0, part1):
     data1 = part1['data']
     mc_r1, mc_c1 = getMassCenter(data1) #relative coordination
     
-    center = [mc_r0, mc_c0]
-    theta = math.atan((mc_r1-mc_r0)/(mc_c1-mc_c0))
+    center = (mc_r0, mc_c0)
+    theta = math.atan((mc_c1-mc_c0)/(mc_r1-mc_r0))
+
     #旋转矩阵
     part0 = rotatePart(part0, center, theta)
     part1 = rotatePart(part1, center, theta)
+
     dist = BPartDistanceXY(part0, part1)
     return dist
     
 """
-旋转部件
+旋转部件(顺时针)
 """    
-def rotate_part(part, center, theta):
+def rotatePart(part, center, theta):
 
     # 位置、数据
     left = part.get('left')
@@ -548,14 +557,15 @@ def rotate_part(part, center, theta):
             r_y = M[1][0]*x+M[1][1]*y+M[1][2]
             r_x = int(round(r_x))
             r_y = int(round(r_y))
-            dict["%d_%d" % (r_x, r_y)] = data[x-left, y-top]
+            dict["%d_%d" % (r_y,r_x)] = data[y-top,x-left]
 
     # 旋转后新矩形区域赋值
-    r_data = np.zeros([X_max-X_min+1, Y_max-Y_min+1, 3])
+    r_data = np.zeros([Y_max-Y_min, X_max-X_min])
     for x in range(X_min, X_max+1):
         for y in range(Y_min, Y_max+1):
-            if "%d_%d" % (x, y) in dict:
-                r_data[x - X_min][y - Y_min] = dict["%d_%d" % (x, y)]
+            if "%d_%d" % (y,x) in dict:
+                r_data[y - Y_min][x - X_min] = dict["%d_%d" % (y,x)]
+
     return {"left":X_min, "top":Y_min, "width":X_max-X_min, "height":Y_max-Y_min, "data":r_data}
 
 """
@@ -581,6 +591,7 @@ def BPartL2Distance(part0, part1):
     dist1 = L2ofPoint(pt00, pt11)
     dist2 = L2ofPoint(pt01, pt10)
     dist3 = L2ofPoint(pt01, pt11)
+    # print([dist0,dist1, dist2, dist3])
     return min([dist0,dist1, dist2, dist3])
 
 """
@@ -604,65 +615,103 @@ def CheckPartConnect(part0, part1, thres, dist='any'):
     else:
         return False
 
-# 测试函数
-def test_function():
+"""
+测试类
+"""
+class Test:
 
-    """
-        整张图片大小为20×20
+    def __init__(self):
 
-        外接矩形坐标:
-        part0 （3 ,3 ）（14,3 ）
-              （3 ,12）（14,12）
+        """
+            整张图片大小为20×20
 
-        part1 （4 ,3 ）（12,3 ）
-              （4 ,14）（12,14）
+            外接矩形坐标:
+            part0 （3 ,3 ）（14,3 ）
+                  （3 ,12）（14,12）
 
-        part0->part1自左至右距离: 6,4,1...
-        part0->part1自上至下距离: 7,5,3,1,-1,-3
-    """
+            part1 （4 ,3 ）（12,3 ）
+                  （4 ,14）（12,14）
 
-    img_1_0 = cv2.imread("./1_0.png")
-    img_1_0 = cv2.cvtColor(img_1_0, cv2.COLOR_BGR2GRAY)
-    img_1_1 = cv2.imread("./1_1.png")
-    img_1_1 = cv2.cvtColor(img_1_1, cv2.COLOR_BGR2GRAY)
+            part0->part1自左至右距离: 6,4,1,-1,-3,-5,-6,-7,-10,-11
+            part0->part1自上至下距离: 7,5,3,1,-1,-3,-5,-8,-10
+        """
+        img_1_0 = cv2.imread("./1_0.png")
+        img_1_0 = cv2.cvtColor(img_1_0, cv2.COLOR_BGR2GRAY)
+        img_1_1 = cv2.imread("./1_1.png")
+        img_1_1 = cv2.cvtColor(img_1_1, cv2.COLOR_BGR2GRAY)
 
-    img_1_0[img_1_0==255] = 0
-    img_1_1[img_1_1==255] = 0
+        img_1_0[img_1_0==255] = 0
+        img_1_1[img_1_1==255] = 0
 
-    part1_0 = {"left": 3, "top": 3, "width": 12, "height": 10, "data": img_1_0[3:12+1, 3:14+1]}  # [y方向，x方向]
-    part1_1 = {"left": 4, "top": 3, "width": 9, "height": 12, "data": img_1_1[3:14+1, 4:12+1]}
+        self.part1_0 = {"left": 3, "top": 3, "width": 12, "height": 10, "data": img_1_0[3:12+1, 3:14+1]}  # [y方向，x方向]
+        self.part1_1 = {"left": 4, "top": 3, "width": 9, "height": 12, "data": img_1_1[3:14+1, 4:12+1]}
 
-    # print(img_1_0 +img_1_1)
-    # print(img_1_0[3:12+1, 3:14+1])
-    # print(img_1_1[3:14+1, 4:12+1])
+        """
+            整张图片大小为20×20 
+            外接矩形坐标：
+            part0 (3,3 ) (7,3 )
+                  (3,10) (7,10)
+            part1 (10,0) (15,0)
+                  (10,10) (15,10)
+            part0->part1 自左至右距离： 3,3,5,5,6,7,8,9
+        """
+        img_2_0 = cv2.imread("./2_0.png")
+        img_2_0 = cv2.cvtColor(img_2_0, cv2.COLOR_BGR2GRAY)
+        img_2_0 = img_2_0 - 255
+        img_2_1 = cv2.imread("./2_1.png")
+        img_2_1 = cv2.cvtColor(img_2_1, cv2.COLOR_BGR2GRAY)
+        img_2_1 = img_2_1 - 255
 
-    print(BPartDistanceX(part1_0, part1_1))
+        img_2_0[img_2_0==255] = 0
+        img_2_1[img_2_1==255] = 0
+
+        self.part2_0 = {"left": 3, "top": 3, "width": 5, "height": 8, "data": img_2_0[3:10+1, 3:7+1]}  # [y方向，x方向]
+        self.part2_1 = {"left": 10, "top": 0, "width": 6, "height": 11, "data": img_2_1[0:10+1, 10:15+1]}
+
+        # print(img_1_0)
+        # print(img_1_1)
+        # print(img_2_0)
+        # print(img_2_1)
 
 
-    """
-        整张图片大小为20×20 
-        外接矩形坐标：
-        part0 (3,3 ) (7,3 )
-              (3,10) (7,10)
-        part1 (10,0) (15,0)
-              (10,10) (15,10)
-        part0->part1 自左至右距离： 3,3,5,5,6,7,8,9
-    """
-    img_2_0 = cv2.imread("./2_0.png")
-    img_2_0 = cv2.cvtColor(img_2_0, cv2.COLOR_BGR2GRAY)
-    img_2_0 = img_2_0 - 255
-    img_2_1 = cv2.imread("./2_1.png")
-    img_2_1 = cv2.cvtColor(img_2_1, cv2.COLOR_BGR2GRAY)
-    img_2_1 = img_2_1 - 255
+    def test_BPart_(self):
 
-    part2_0 = {"left": 3, "top": 3, "width": 5, "height": 8, "data": img_2_0[3:10+1, 3:7+1]}  # [y方向，x方向]
-    part2_1 = {"left": 10, "top": 0, "width": 6, "height": 11, "data": img_2_1[0:10+1, 10:15+1]}
+        test1_BPartDistanceY = BPartDistanceY(self.part1_0, self.part1_1)
+        test1_BPartDistanceX = BPartDistanceX(self.part1_0, self.part1_1)
 
-    img_2_0[img_2_0==255] = 0
-    img_2_1[img_2_1==255] = 0
+        test2_BPartDistanceY = BPartDistanceY(self.part2_0, self.part2_1)
+        test2_BPartDistanceX = BPartDistanceX(self.part2_0, self.part2_1)
 
-    # print(BPartDistanceY(part2_0, part2_1))
+        # print(test1_BPartDistanceX)
+        # print(test2_BPartDistanceY)
+
+        # BPartDistanceY
+        assert test1_BPartDistanceY == 6 and test2_BPartDistanceY == 3
+        # BPartDistanceX
+        assert test1_BPartDistanceX == 7 and test2_BPartDistanceX == sys.maxsize
+
+        # BPartL2Distance
+        test1_BPartL2Distance = BPartL2Distance(self.part1_0, self.part1_1)
+        assert test1_BPartL2Distance == 1.0
+
+
+    def test_getMassCenter(self):
+
+        arr = np.array([[0,0,1],[0,0,1],[0,0,1]])
+        mc_r1, mc_c1 = getMassCenter(arr)
+        # getMassCenter 图像坐标系下 x,y
+        assert mc_c1 == 2 and mc_r1 == 1
+
+    def test_BPartMCDistance(self):
+
+        test2_BPartMCDistance = BPartMCDistance(self.part2_0,self.part2_1)
+        assert  test2_BPartMCDistance == 3
+
+
+
 
 
 if __name__ == '__main__':
-    test_function()
+    Test().test_BPartMCDistance()
+    # Test().test_getMassCenter()
+    # Test().test_BPart_()
